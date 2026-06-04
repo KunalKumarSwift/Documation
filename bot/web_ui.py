@@ -194,17 +194,21 @@ function escapeHtml(s) {
 
 
 class QuestionRequest(BaseModel):
+    """Request body for the /ask endpoint."""
+
     question: str
-    collection: str | None = None
+    collection: str | None = None  # None triggers auto-routing
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    """Serve the single-page chat UI."""
     return HTMLResponse(content=HTML)
 
 
 @app.post("/ask")
 async def ask_question(req: QuestionRequest):
+    """Run a RAG query and return the answer, sources, and confidence level."""
     try:
         from bot.query_engine import ask
         result = ask(req.question, collection=req.collection)
@@ -223,6 +227,7 @@ async def ask_question(req: QuestionRequest):
 
 @app.get("/health")
 async def health():
+    """Liveness check — returns the active vector store backend."""
     return {"status": "ok", "backend": os.getenv("VECTORSTORE_BACKEND", "chroma_local")}
 
 

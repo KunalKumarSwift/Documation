@@ -59,6 +59,7 @@ COLLECTIONS = ["architecture", "authentication", "payments", "runbooks", "onboar
 
 
 def format_result(result) -> str:
+    """Format a QueryResult for terminal display with confidence indicator and source list."""
     confidence_icon = {"HIGH": "✓", "MEDIUM": "~", "LOW": "?"}.get(result.confidence, "?")
 
     lines = [
@@ -79,6 +80,7 @@ def format_result(result) -> str:
 
 
 def do_sync():
+    """Trigger a full incremental sync of docs/ to the vector store."""
     print("\nRunning doc sync...\n")
     from scripts.sync_vectorstore import sync
     sync()
@@ -86,6 +88,7 @@ def do_sync():
 
 
 def list_collections():
+    """Print each docs/ subfolder with a count of indexed markdown files."""
     from pathlib import Path
     docs_dir = Path(__file__).parent.parent / "docs"
     print("\nAvailable collections:")
@@ -100,6 +103,7 @@ def list_collections():
 
 
 def handle_input(user_input: str):
+    """Parse an optional /collection prefix from the input, then run the RAG query."""
     user_input = user_input.strip()
     if not user_input:
         return
@@ -130,6 +134,7 @@ def handle_input(user_input: str):
 
 
 def run_interactive():
+    """Start the interactive REPL until the user exits."""
     print(BANNER)
     while True:
         try:
@@ -157,6 +162,7 @@ def run_interactive():
 
 
 def main():
+    """Single-question mode when CLI args are provided; falls back to the interactive REPL."""
     if len(sys.argv) > 1:
         # Single question mode
         question = " ".join(sys.argv[1:])

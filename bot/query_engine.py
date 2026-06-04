@@ -36,6 +36,8 @@ Context:
 
 @dataclass
 class QueryResult:
+    """Structured response returned by the RAG pipeline."""
+
     answer: str
     source_files: list[str]
     collection: str
@@ -43,6 +45,7 @@ class QueryResult:
 
 
 def get_embeddings():
+    """Return the embedding model for the current environment (CI → OpenAI, local → Ollama)."""
     is_ci = os.getenv("CI", "").lower() == "true"
     if is_ci:
         from langchain_openai import OpenAIEmbeddings
@@ -55,6 +58,7 @@ def get_embeddings():
 
 
 def get_vectorstore(embeddings, collection: str = "general"):
+    """Return a vector store client scoped to a single collection/namespace."""
     if VECTORSTORE_BACKEND == "pinecone":
         from langchain_pinecone import PineconeVectorStore
         from pinecone import Pinecone
@@ -75,6 +79,7 @@ def get_vectorstore(embeddings, collection: str = "general"):
 
 
 def get_llm():
+    """Return the answer-generation LLM for the current environment (CI → GPT-4o, local → Ollama)."""
     is_ci = os.getenv("CI", "").lower() == "true"
     if is_ci:
         from langchain_openai import ChatOpenAI
@@ -105,16 +110,7 @@ def query_all_collections(embeddings, question: str, k: int = 3):
 
 
 def ask(question: str, collection: Optional[str] = None) -> QueryResult:
-    """
-    Ask a question and get a grounded answer from the docs.
-
-    Args:
-        question: The user's question
-        collection: Optional collection to search. Auto-routes if None.
-
-    Returns:
-        QueryResult with answer, sources, and confidence
-    """
+    """Route the question, retrieve the top-3 chunks, and generate a grounded answer."""
     from bot.router import route_query
 
     # Route if no collection specified

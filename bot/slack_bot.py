@@ -52,6 +52,7 @@ HELP_TEXT = """*DocBot* — iOS Platform Documentation Assistant
 
 
 def extract_question_and_collection(text: str) -> tuple[str, str | None]:
+    """Strip the @bot mention and detect an optional /collection prefix from the message text."""
     # Remove bot mention
     text = re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
@@ -64,6 +65,7 @@ def extract_question_and_collection(text: str) -> tuple[str, str | None]:
 
 
 def format_slack_response(result) -> str:
+    """Format a QueryResult as Slack mrkdwn with source citations and a feedback prompt."""
     confidence_emoji = {"HIGH": "✅", "MEDIUM": "⚠️", "LOW": "❓"}.get(result.confidence, "⚠️")
 
     lines = [result.answer, ""]
@@ -79,7 +81,11 @@ def format_slack_response(result) -> str:
 
 
 def handle_question(question: str, collection: str | None, say, thread_ts: str | None = None):
-    # Send placeholder immediately
+    """Post a 'Searching...' placeholder immediately, run the RAG query, then update the message.
+
+    Slack requires an initial response within 3 seconds; the two-step post+edit
+    pattern keeps us under that limit while the query runs.
+    """
     placeholder = say(text="Searching docs...", thread_ts=thread_ts)
 
     try:
@@ -99,6 +105,7 @@ def handle_question(question: str, collection: str | None, say, thread_ts: str |
 
 @app.event("app_mention")
 def handle_mention(event, say):
+    """Handle @docbot mentions in channels; supports /help, /collections, and RAG queries."""
     text = event.get("text", "")
     thread_ts = event.get("thread_ts") or event.get("ts")
 
@@ -129,6 +136,7 @@ def handle_mention(event, say):
 
 @app.event("message")
 def handle_dm(event, say):
+    """Handle direct messages to the bot; ignores channel messages and bot echoes."""
     if event.get("channel_type") != "im":
         return
     if event.get("bot_id"):

@@ -28,20 +28,24 @@ def get_collection_name(filepath: Path) -> str:
 
 
 def md5_file(filepath: Path) -> str:
+    """Return the MD5 hex digest of a file's raw bytes."""
     return hashlib.md5(filepath.read_bytes()).hexdigest()
 
 
 def load_hash_registry() -> dict:
+    """Load the persisted source→hash map, or return empty dict on first run."""
     if HASH_FILE.exists():
         return json.loads(HASH_FILE.read_text())
     return {}
 
 
 def save_hash_registry(registry: dict):
+    """Persist the source→hash map so the next sync can skip unchanged files."""
     HASH_FILE.write_text(json.dumps(registry, indent=2))
 
 
 def get_embeddings():
+    """Return the embedding model for the current environment (CI → OpenAI, local → Ollama)."""
     if IS_CI:
         from langchain_openai import OpenAIEmbeddings
         print("Using OpenAI embeddings (CI mode)")
@@ -55,6 +59,7 @@ def get_embeddings():
 
 
 def get_vectorstore(embeddings, collection: str = "general"):
+    """Return a vector store client scoped to a single collection/namespace."""
     if VECTORSTORE_BACKEND == "pinecone":
         from langchain_pinecone import PineconeVectorStore
         from pinecone import Pinecone
@@ -81,6 +86,8 @@ def delete_chunks_for_source(source: str, collection: str, embeddings):
         from pinecone import Pinecone
         pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
         index = pc.Index(os.getenv("PINECONE_INDEX", "docbot-docs"))
+        # Pinecone requires a query vector even for metadata-only deletes;
+        # a zero vector with a source filter returns the IDs we need to drop.
         results = index.query(
             vector=[0.0] * 1536,
             top_k=1000,
@@ -103,6 +110,7 @@ def delete_chunks_for_source(source: str, collection: str, embeddings):
 
 
 def ingest_file(filepath: Path, embeddings, registry: dict):
+    """Split a markdown file into overlapping chunks, embed them, and upsert to the vector store."""
     from langchain_community.document_loaders import TextLoader
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -128,6 +136,7 @@ def ingest_file(filepath: Path, embeddings, registry: dict):
 
 
 def sync():
+    """Diff docs/ against the hash registry and sync only new, changed, or deleted files."""
     print(f"\nDocBot Vector Store Sync")
     print(f"Backend: {VECTORSTORE_BACKEND}")
     print(f"Docs dir: {DOCS_DIR}\n")

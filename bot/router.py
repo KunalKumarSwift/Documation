@@ -19,6 +19,8 @@ CollectionName = Literal["architecture", "authentication", "payments", "runbooks
 
 
 class RouterResponse(BaseModel):
+    """Structured output from the routing LLM call."""
+
     collection: CollectionName = Field(description="The most relevant doc collection")
     confidence: Literal["HIGH", "LOW"] = Field(description="Confidence in the routing decision")
     reasoning: str = Field(description="One sentence explaining the routing choice")
@@ -43,6 +45,7 @@ If unsure, return general with LOW confidence."""),
 
 
 def get_llm():
+    """Return a zero-temperature LLM for deterministic collection classification."""
     is_ci = os.getenv("CI", "").lower() == "true"
     if is_ci:
         from langchain_openai import ChatOpenAI
@@ -61,6 +64,7 @@ def route_query(question: str) -> RouterResponse:
         parser = JsonOutputParser(pydantic_object=RouterResponse)
         chain = ROUTER_PROMPT | llm | parser
         result = chain.invoke({"question": question})
+        # JsonOutputParser returns a plain dict; unpack into the model for type safety.
         return RouterResponse(**result)
     except Exception as e:
         print(f"Router error (falling back to general): {e}")
