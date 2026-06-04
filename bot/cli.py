@@ -1,28 +1,43 @@
 #!/usr/bin/env python3
 """
-DocBot CLI — Interactive command-line interface for testing DocBot.
-No Slack or API keys needed (uses Ollama + ChromaDB by default).
+DocBot CLI
+==========
+Interactive command-line interface for querying DocBot without Slack.
+Works entirely offline using Ollama + ChromaDB — no API keys required.
 
-Usage:
-    python bot/cli.py                     # interactive mode
-    python bot/cli.py "your question"     # single question mode
+Usage
+-----
+Interactive mode (REPL)::
 
-Commands in interactive mode:
-    /help                    Show help
-    /sync                    Re-sync docs to vector store
-    /collections             List available collections
-    /auth <question>         Query authentication docs
-    /payments <question>     Query payments docs
-    /runbooks <question>     Query runbooks
-    /onboarding <question>   Query onboarding docs
-    /architecture <question> Query architecture docs
-    /quit or /exit           Exit
+    python bot/cli.py
+
+Single-question mode::
+
+    python bot/cli.py "How does Face ID fallback work?"
+
+Force a specific collection::
+
+    python bot/cli.py --auth "What is the session token expiry?"
+    python bot/cli.py --runbooks "push notifications not working"
+
+REPL commands
+-------------
+/help                   Show this help
+/sync                   Re-index docs/ to the vector store
+/collections            List collections and their file counts
+/auth <q>               Query authentication docs
+/payments <q>           Query payments docs
+/runbooks <q>           Query runbooks
+/onboarding <q>         Query onboarding docs
+/architecture <q>       Query architecture docs
+/quit, /exit            Exit the REPL
 """
 
 import sys
 import os
 
-# Ensure project root is on path
+# Add the project root to sys.path so ``bot`` and ``scripts`` are importable
+# when this file is run directly (e.g. ``python bot/cli.py``).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
@@ -55,11 +70,23 @@ Examples:
   /runbooks push notifications not working
 """
 
+# Valid collection names — must match the docs/ subdirectory names.
 COLLECTIONS = ["architecture", "authentication", "payments", "runbooks", "onboarding"]
 
 
 def format_result(result) -> str:
-    """Format a QueryResult for terminal display with confidence indicator and source list."""
+    """Format a QueryResult for terminal display.
+
+    Renders the answer, a confidence indicator, and the list of source files
+    that contributed context to the answer.
+
+    Args:
+        result: A ``QueryResult`` dataclass instance from ``query_engine.ask()``.
+
+    Returns:
+        A multi-line string ready to print to stdout, with leading/trailing
+        blank lines for visual breathing room.
+    """
     confidence_icon = {"HIGH": "✓", "MEDIUM": "~", "LOW": "?"}.get(result.confidence, "?")
 
     lines = [
@@ -73,22 +100,31 @@ def format_result(result) -> str:
         for src in result.source_files:
             lines.append(f"    • {src}")
     else:
+        # No sources means confidence was LOW and the engine returned early.
         lines.append(f"  [{confidence_icon} {result.confidence} confidence]")
 
     lines.append("")
     return "\n".join(lines)
 
 
-def do_sync():
-    """Trigger a full incremental sync of docs/ to the vector store."""
+def do_sync() -> None:
+    """Trigger an incremental sync of the docs/ folder to the vector store.
+
+    Calls the same ``sync()`` function used by GitHub Actions, so this
+    is the exact same code path that runs in CI.
+    """
     print("\nRunning doc sync...\n")
     from scripts.sync_vectorstore import sync
     sync()
     print()
 
 
-def list_collections():
-    """Print each docs/ subfolder with a count of indexed markdown files."""
+def list_collections() -> None:
+    """Print each docs/ subfolder alongside its count of markdown files.
+
+    Walks each expected collection directory with rglob so nested subfolders
+    (e.g. docs/auth/flows/*.md) are counted correctly.
+    """
     from pathlib import Path
     docs_dir = Path(__file__).parent.parent / "docs"
     print("\nAvailable collections:")
@@ -102,16 +138,28 @@ def list_collections():
     print()
 
 
-def handle_input(user_input: str):
-    """Parse an optional /collection prefix from the input, then run the RAG query."""
+def handle_input(user_input: str) -> None:
+    """Parse an optional /collection prefix, then run and print the RAG query.
+
+    The function detects prefixes of the form ``/collectionname question text``
+    (e.g. ``/auth what is session expiry?``) and routes accordingly.
+    Plain text with no prefix is sent to the auto-router.
+
+    Args:
+        user_input: Raw text from the user, with any leading slash already
+                    stripped by the REPL (the REPL calls this for ``/auth``,
+                    ``/payments``, etc. after removing the leading ``/``).
+    """
     user_input = user_input.strip()
     if not user_input:
         return
 
-    # Check for collection-specific commands
     forced_collection = None
     question = user_input
 
+    # Check whether the text begins with a known collection name prefix.
+    # The prefix format is: "collectionname rest of question"
+    # (the leading slash was already stripped by the caller).
     for col in COLLECTIONS:
         if user_input.lower().startswith(f"/{col} "):
             forced_collection = col
@@ -122,19 +170,28 @@ def handle_input(user_input: str):
         print(f"Usage: /{forced_collection} <your question>")
         return
 
+    # Print inline so the cursor stays on the same line while querying.
     print("\nSearching docs...", end="", flush=True)
     try:
         from bot.query_engine import ask
         result = ask(question, collection=forced_collection)
-        print("\r" + " " * 20 + "\r", end="")  # clear "Searching..."
+        # Overwrite "Searching docs..." with spaces to clear the line cleanly.
+        print("\r" + " " * 20 + "\r", end="")
         print(format_result(result))
     except Exception as e:
         print(f"\nError: {e}")
         print("Make sure Ollama is running: ollama serve\n")
 
 
-def run_interactive():
-    """Start the interactive REPL until the user exits."""
+def run_interactive() -> None:
+    """Run the interactive REPL until the user types /quit or sends EOF.
+
+    Handles special commands (/help, /sync, /collections, /quit) directly.
+    All other input — whether plain text or /collection-prefixed — is
+    delegated to ``handle_input()``.
+
+    Exits cleanly on Ctrl-C (KeyboardInterrupt) or Ctrl-D (EOFError).
+    """
     print(BANNER)
     while True:
         try:
@@ -156,18 +213,27 @@ def run_interactive():
         elif user_input.lower() == "/collections":
             list_collections()
         elif user_input.startswith("/"):
-            handle_input(user_input[1:])  # strip leading /
+            # Strip the leading "/" and let handle_input detect the collection prefix.
+            handle_input(user_input[1:])
         else:
             handle_input(user_input)
 
 
-def main():
-    """Single-question mode when CLI args are provided; falls back to the interactive REPL."""
+def main() -> None:
+    """Entry point: single-question mode when args are provided, REPL otherwise.
+
+    Single-question mode accepts an optional ``--<collection>`` flag to force
+    a specific collection, e.g.::
+
+        python bot/cli.py --auth "what is the session token TTL?"
+
+    The flag is stripped from the question string before querying.
+    Exits with code 1 if the query raises an exception.
+    """
     if len(sys.argv) > 1:
-        # Single question mode
         question = " ".join(sys.argv[1:])
 
-        # Check for collection flag like --auth
+        # Detect an optional --collectionname flag anywhere in the argument list.
         collection = None
         for col in COLLECTIONS:
             flag = f"--{col}"

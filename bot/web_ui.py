@@ -1,15 +1,34 @@
 """
-DocBot Web UI — Browser-based chat interface for DocBot.
-No Slack needed. Runs on http://localhost:8000
+DocBot Web UI
+=============
+Browser-based chat interface for DocBot. No Slack account or tokens needed.
 
-Usage:
+The entire frontend is a single-page app embedded as a Python string constant
+(``HTML``). This avoids a separate template directory and makes the server
+self-contained — one file, one process, zero static assets to deploy.
+
+Endpoints
+---------
+GET  /        Serves the chat UI (HTML + CSS + vanilla JS).
+POST /ask     Accepts ``{"question": str, "collection": str | null}``,
+              runs the RAG pipeline, returns the answer + sources + confidence.
+GET  /health  Liveness check — returns the active vector store backend name.
+
+Usage::
+
     python bot/web_ui.py
-    # Then open http://localhost:8000 in your browser
+    # Open http://localhost:8000 in your browser
+
+Environment variables
+---------------------
+PORT                  HTTP port to listen on (default: 8000).
+VECTORSTORE_BACKEND   Passed through to query_engine (chroma_local | pinecone).
 """
 
 import os
 import sys
 
+# Add the project root so ``bot`` and ``scripts`` are importable when run directly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
@@ -194,21 +213,53 @@ function escapeHtml(s) {
 
 
 class QuestionRequest(BaseModel):
-    """Request body for the /ask endpoint."""
+    """JSON body accepted by POST /ask.
+
+    Attributes:
+        question:   The engineer's free-text question.
+        collection: Optional collection to search. When null (the default),
+                    the router automatically picks the best collection.
+                    Valid values: "architecture", "authentication", "payments",
+                    "runbooks", "onboarding".
+    """
 
     question: str
-    collection: str | None = None  # None triggers auto-routing
+    collection: str | None = None
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
-    """Serve the single-page chat UI."""
+async def index() -> HTMLResponse:
+    """Serve the single-page chat UI.
+
+    Returns:
+        The full HTML document as a response. No file I/O — the HTML is
+        stored as the ``HTML`` module-level constant.
+    """
     return HTMLResponse(content=HTML)
 
 
 @app.post("/ask")
 async def ask_question(req: QuestionRequest):
-    """Run a RAG query and return the answer, sources, and confidence level."""
+    """Run the RAG pipeline and return a structured answer.
+
+    Args:
+        req: Parsed request body with the question and optional collection.
+
+    Returns:
+        JSON object::
+
+            {
+              "answer":       str,        # LLM-generated grounded answer
+              "source_files": list[str],  # Repo-relative paths that contributed context
+              "collection":   str,        # Collection that was actually searched
+              "confidence":   str         # "HIGH" | "MEDIUM" | "LOW"
+            }
+
+    Raises (as HTTP 500):
+        Any exception from the query engine — most commonly Ollama not running
+        or the vector store not yet synced. The error message is included in
+        the response body so the UI can display it.
+    """
     try:
         from bot.query_engine import ask
         result = ask(req.question, collection=req.collection)
@@ -221,13 +272,22 @@ async def ask_question(req: QuestionRequest):
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"answer": f"Error: {str(e)}", "source_files": [], "collection": "unknown", "confidence": "LOW"},
+            content={
+                "answer": f"Error: {str(e)}",
+                "source_files": [],
+                "collection": "unknown",
+                "confidence": "LOW",
+            },
         )
 
 
 @app.get("/health")
-async def health():
-    """Liveness check — returns the active vector store backend."""
+async def health() -> dict:
+    """Liveness check used by load balancers and monitoring.
+
+    Returns:
+        JSON object with ``status`` ("ok") and the active ``backend`` name.
+    """
     return {"status": "ok", "backend": os.getenv("VECTORSTORE_BACKEND", "chroma_local")}
 
 
