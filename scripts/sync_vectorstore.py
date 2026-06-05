@@ -29,8 +29,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from bot.embeddings_facade import EmbeddingsFacade
-from bot.vectorstore_facade import VectorStoreFacade
+from bot.facades.embeddings_facade import EmbeddingsFacade
+from bot.facades.vectorstore_facade import VectorStoreFacade
 
 DOCS_DIR = Path(__file__).parent.parent / "docs"
 HASH_FILE = Path(__file__).parent.parent / ".vectorstore_hashes.json"
