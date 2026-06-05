@@ -1,42 +1,49 @@
 """
 EmbeddingsFacade
 ================
-Subsystem facade that hides embedding-provider selection from all callers.
+Selects the correct ``EmbeddingProvider`` implementation based on the environment.
 
-Selects OpenAI text-embedding-3-small (CI) or Ollama llama3.2 (local)
-based on the ``CI`` environment variable. Callers never import from
-``langchain_openai`` or ``langchain_ollama`` directly.
+This facade contains *only* the switching logic — no embedding code lives here.
+All implementation details are in ``bot/providers/``.
+
+Switch:
+    CI=true  →  ``OpenAIEmbeddingProvider``
+    default  →  ``OllamaEmbeddingProvider``
 """
 
 import os
 from dotenv import load_dotenv
+from bot.providers.protocols import EmbeddingProvider
 
 load_dotenv()
 
+_IS_CI = os.getenv("CI", "").lower() == "true"
+
 
 class EmbeddingsFacade:
-    """Subsystem facade: returns the appropriate embedding model for the environment.
+    """Facade that selects and exposes the appropriate EmbeddingProvider.
 
-    The model used at query time must match the one used during ingest —
-    mixing providers produces meaningless similarity scores.
+    Callers use ``get_provider()`` to obtain the typed provider, or the
+    convenience ``get_model()`` shortcut to go directly to the model instance.
     """
 
-    def get(self):
-        """Return the configured embedding model instance.
+    def get_provider(self) -> EmbeddingProvider:
+        """Return the EmbeddingProvider for the current environment.
 
         Returns:
-            ``OpenAIEmbeddings`` (text-embedding-3-small) when ``CI=true``.
-            ``OllamaEmbeddings`` (llama3.2) otherwise — free and local.
-
-        Raises:
-            ConnectionError: If Ollama is not running (local mode only).
+            ``OpenAIEmbeddingProvider`` when ``CI=true``.
+            ``OllamaEmbeddingProvider`` otherwise.
         """
-        if os.getenv("CI", "").lower() == "true":
-            from langchain_openai import OpenAIEmbeddings
-            return OpenAIEmbeddings(model="text-embedding-3-small")
+        if _IS_CI:
+            from bot.providers.openai_embeddings import OpenAIEmbeddingProvider
+            return OpenAIEmbeddingProvider()
+        from bot.providers.ollama_embeddings import OllamaEmbeddingProvider
+        return OllamaEmbeddingProvider()
 
-        from langchain_ollama import OllamaEmbeddings
-        return OllamaEmbeddings(
-            model=os.getenv("OLLAMA_MODEL", "llama3.2"),
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        )
+    def get_model(self):
+        """Convenience shortcut: return the embedding model instance directly.
+
+        Returns:
+            A LangChain-compatible ``Embeddings`` object from the active provider.
+        """
+        return self.get_provider().get_model()

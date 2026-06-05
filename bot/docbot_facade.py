@@ -93,7 +93,7 @@ class DocBotFacade:
             collection = route.collection
             print(f"Routed to: {collection} ({route.confidence})")
 
-        vs = VectorStoreFacade(EmbeddingsFacade().get())
+        vs = VectorStoreFacade(EmbeddingsFacade().get_model())
         docs_with_scores = (
             self._search_all(vs, question)
             if collection == "general"

@@ -118,7 +118,7 @@ def sync() -> None:
         sys.exit(1)
 
     registry = _load_registry()
-    vs = VectorStoreFacade(EmbeddingsFacade().get())
+    vs = VectorStoreFacade(EmbeddingsFacade().get_model())
 
     all_files = list(DOCS_DIR.rglob("*.md")) + list(DOCS_DIR.rglob("*.txt"))
     current = {str(f.relative_to(DOCS_DIR.parent)): f for f in all_files}
