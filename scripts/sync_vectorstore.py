@@ -29,8 +29,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from bot.embeddings_facade import EmbeddingsFacade
-from bot.vectorstore_facade import VectorStoreFacade
+from bot.facades.embeddings_facade import EmbeddingsFacade
+from bot.facades.vectorstore_facade import VectorStoreFacade
 
 DOCS_DIR = Path(__file__).parent.parent / "docs"
 HASH_FILE = Path(__file__).parent.parent / ".vectorstore_hashes.json"
@@ -118,7 +118,7 @@ def sync() -> None:
         sys.exit(1)
 
     registry = _load_registry()
-    vs = VectorStoreFacade(EmbeddingsFacade().get())
+    vs = VectorStoreFacade(EmbeddingsFacade().get_model())
 
     all_files = list(DOCS_DIR.rglob("*.md")) + list(DOCS_DIR.rglob("*.txt"))
     current = {str(f.relative_to(DOCS_DIR.parent)): f for f in all_files}

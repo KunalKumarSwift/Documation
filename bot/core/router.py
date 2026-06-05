@@ -63,7 +63,7 @@ def route_query(question: str) -> RouterResponse:
         RouterResponse with the chosen collection, confidence, and reasoning.
         Falls back to ``collection="general", confidence="LOW"`` on any error.
     """
-    from bot.llm_facade import LLMFacade
+    from bot.facades.llm_facade import LLMFacade
     try:
         llm = LLMFacade().get_router_llm()
         chain = _ROUTER_PROMPT | llm | JsonOutputParser(pydantic_object=RouterResponse)

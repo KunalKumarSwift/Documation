@@ -83,17 +83,17 @@ class DocBotFacade:
         Returns:
             QueryResult with the answer, source files, collection, and confidence level.
         """
-        from bot.router import route_query
-        from bot.embeddings_facade import EmbeddingsFacade
-        from bot.vectorstore_facade import VectorStoreFacade
-        from bot.llm_facade import LLMFacade
+        from bot.core.router import route_query
+        from bot.facades.embeddings_facade import EmbeddingsFacade
+        from bot.facades.vectorstore_facade import VectorStoreFacade
+        from bot.facades.llm_facade import LLMFacade
 
         if collection is None or collection == "general":
             route = route_query(question)
             collection = route.collection
             print(f"Routed to: {collection} ({route.confidence})")
 
-        vs = VectorStoreFacade(EmbeddingsFacade().get())
+        vs = VectorStoreFacade(EmbeddingsFacade().get_model())
         docs_with_scores = (
             self._search_all(vs, question)
             if collection == "general"

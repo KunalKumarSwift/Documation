@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 
-from bot.web_template import HTML
+from bot.templates.web_template import HTML
 from bot.docbot_facade import DocBotFacade
 
 app = FastAPI(title="DocBot", description="iOS Documentation Assistant")
