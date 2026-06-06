@@ -3,11 +3,12 @@ Ollama Embedding Provider
 =========================
 Implements ``EmbeddingProvider`` using a locally running Ollama model.
 
-Default model: ``llama3.2``. No API key required — free and fully local.
-Requires Ollama to be running: ``ollama serve`` and ``ollama pull llama3.2``.
+Default embedding model: ``nomic-embed-text``. No API key required — free and fully local.
+Requires Ollama to be running: ``ollama serve`` and ``ollama pull nomic-embed-text``.
 
 Environment variables:
-    OLLAMA_MODEL    Model name (default: ``llama3.2``).
+    OLLAMA_EMBEDDING_MODEL    Embedding model (default: ``nomic-embed-text``).
+    OLLAMA_BASE_URL           Ollama API base URL (default: ``http://localhost:11434``).
     OLLAMA_BASE_URL Ollama API base URL (default: ``http://localhost:11434``).
 """
 
@@ -30,7 +31,10 @@ class OllamaEmbeddingProvider:
             httpx.ConnectError: If Ollama is not running at ``OLLAMA_BASE_URL``.
         """
         from langchain_ollama import OllamaEmbeddings
+
         return OllamaEmbeddings(
-            model=os.getenv("OLLAMA_MODEL", "llama3.2"),
+            model=os.getenv(
+                "OLLAMA_EMBEDDING_MODEL", os.getenv("OLLAMA_MODEL", "nomic-embed-text")
+            ),
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
