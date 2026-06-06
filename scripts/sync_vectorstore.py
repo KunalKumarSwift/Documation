@@ -32,8 +32,8 @@ load_dotenv()
 from bot.facades.embeddings_facade import EmbeddingsFacade
 from bot.facades.vectorstore_facade import VectorStoreFacade
 
-DOCS_DIR = Path(__file__).parent.parent / "docs"
-HASH_FILE = Path(__file__).parent.parent / ".vectorstore_hashes.json"
+DOCS_DIR = Path(os.getenv("DOCS_DIR", str(Path(__file__).parent.parent / "docs")))
+HASH_FILE = Path(os.getenv("HASH_FILE", str(Path(__file__).parent.parent / ".vectorstore_hashes.json")))
 BACKEND = os.getenv("VECTORSTORE_BACKEND", "chroma_local")
 
 

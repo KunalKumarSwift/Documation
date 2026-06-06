@@ -1,6 +1,26 @@
 name: Sync DocBot Vector Store
 
 on:
+  # ── Called from another repo ─────────────────────────────────────────────────
+  workflow_call:
+    inputs:
+      docs_path:
+        description: Relative path to the docs folder in the calling repo
+        default: docs
+        type: string
+      pinecone_index:
+        description: Pinecone index name
+        default: docbot-docs
+        type: string
+    secrets:
+      PINECONE_API_KEY:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      LANGCHAIN_API_KEY:
+        required: false
+
+  # ── Native runs (changes to this repo) ───────────────────────────────────────
   push:
     branches: [main, develop]
     paths:
@@ -12,15 +32,26 @@ on:
 
 jobs:
   sync:
-    if: github.event.pull_request.merged == true || github.event_name == 'push'
+    if: github.event.pull_request.merged == true || github.event_name == 'push' || github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the calling repo (or this repo on native runs)
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # On workflow_call, fetch DocBot code into a subdirectory
+      - name: Checkout DocBot engine
+        if: github.event_name == 'workflow_call'
+        uses: actions/checkout@v4
+        with:
+          repository: KunalKumarSwift/Documation
+          ref: main
+          path: _docbot
 
       - uses: actions/setup-python@v5
         with:
@@ -30,19 +61,32 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        run: uv sync
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_call" ]; then
+            cd _docbot && uv sync
+          else
+            uv sync
+          fi
 
       - name: Run vector store sync
         env:
-          CI: true
+          CI: "true"
           VECTORSTORE_BACKEND: pinecone
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          PINECONE_INDEX: ${{ secrets.PINECONE_INDEX || 'docbot-docs' }}
+          PINECONE_INDEX: ${{ inputs.pinecone_index || secrets.PINECONE_INDEX || 'docbot-docs' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LANGCHAIN_API_KEY: ${{ secrets.LANGCHAIN_API_KEY }}
-          LANGCHAIN_TRACING_V2: ${{ secrets.LANGCHAIN_TRACING_V2 || 'false' }}
+          LANGCHAIN_TRACING_V2: ${{ vars.LANGCHAIN_TRACING_V2 || 'false' }}
           LANGCHAIN_PROJECT: docbot
-        run: uv run python scripts/sync_vectorstore.py
+          # On workflow_call, point the sync script at the caller's docs and workspace
+          DOCS_DIR: ${{ github.event_name == 'workflow_call' && format('{0}/{1}', github.workspace, inputs.docs_path) || '' }}
+          HASH_FILE: ${{ github.event_name == 'workflow_call' && format('{0}/.vectorstore_hashes.json', github.workspace) || '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_call" ]; then
+            cd _docbot && uv run python scripts/sync_vectorstore.py
+          else
+            uv run python scripts/sync_vectorstore.py
+          fi
 
       - name: Commit updated hashes
         run: |
