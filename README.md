@@ -1,207 +1,205 @@
-# DocBot — iOS Platform Documentation Assistant
+# DocBot
 
-DocBot is an AI chatbot that makes your team's GitHub markdown docs instantly queryable. Ask questions in natural language and get grounded answers with source citations — works via web UI, CLI, or Slack.
+**Chat with your team's docs. Runs 100% locally. No API keys needed.**
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Local First](https://img.shields.io/badge/local--first-no%20API%20keys-orange.svg)]()
+
+Drop your team's `.md` files into a folder. Ask questions in plain English. Get answers with source citations — via web UI, CLI, or Slack.
+
+> **One command to run. Everything included.**
+
+---
+
+## Demo
+
+![DocBot web UI — ask a question, get an answer with source citations](.github/assets/demo.gif)
+
+*Web UI · CLI · Slack bot — all included out of the box.*
+
+---
+
+## Quick Start
+
+**With Docker (recommended):**
+
+```bash
+git clone https://github.com/KunalKumarSwift/Documation.git && cd Documation
+docker compose up
+```
+
+Open [http://localhost:8000](http://localhost:8000). Done.
+
+> First run downloads Ollama models (~2 GB). Subsequent starts are instant.
+
+---
+
+**Without Docker:**
+
+```bash
+# Install Ollama (local LLM — free, no account needed)
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull nomic-embed-text && ollama pull phi3:latest
+
+# Install and run
+git clone https://github.com/KunalKumarSwift/Documation.git && cd Documation
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync && cp .env.example .env
+ollama serve &
+uv run python scripts/sync_vectorstore.py
+uv run python bot/web_ui.py
+```
+
+---
+
+## Add your docs
+
+Drop `.md` or `.txt` files anywhere under `docs/`:
+
+```
+docs/
+  architecture/     # ADRs, system design
+  authentication/   # Auth flows, session tokens
+  payments/         # Transfer flows, limits
+  runbooks/         # Incident response
+  onboarding/       # Getting started
+```
+
+DocBot auto-routes questions to the right collection. Re-sync after adding files:
+
+```bash
+uv run python scripts/sync_vectorstore.py
+# or just restart Docker — it syncs on every startup
+```
+
+---
+
+## Use DocBot in your own repo
+
+Any repo with a `docs/` folder can sync to DocBot automatically. Add one file to `.github/workflows/`:
+
+```yaml
+# .github/workflows/sync-docs.yml
+name: Sync Docs to DocBot
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**']
+
+jobs:
+  sync:
+    uses: KunalKumarSwift/Documation/.github/workflows/sync-vectorstore.yml@main
+    with:
+      docs_path: docs
+      pinecone_index: my-team-docs   # your own index
+    secrets:
+      PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+Every push to `main` that touches `docs/` will sync automatically. No DocBot code lives in your repo.
+
+---
+
+## Stack
+
+| Layer | Local (default) | Production (opt-in) |
+|---|---|---|
+| LLM | Ollama + phi3 | OpenAI GPT-4o |
+| Embeddings | Ollama + nomic-embed-text | OpenAI text-embedding-3-small |
+| Vector store | ChromaDB (local disk) | Pinecone |
+| Observability | — | LangSmith (free tier) |
+
+Switch to production by setting env vars — no code changes needed.
+
+---
+
+## Interfaces
+
+**Web UI** (`localhost:8000`) — dark-mode chat, source citations, confidence score
+
+**CLI:**
+```bash
+uv run python bot/cli.py                          # interactive
+uv run python bot/cli.py "How does auth work?"    # single question
+uv run python bot/cli.py --auth "session tokens"  # force collection
+```
+
+**Slack:** mention `@docbot` in any channel or DM it directly. See [Slack setup](#slack-setup) below.
+
+---
 
 ## Architecture
 
 ```
-docs/*.md ──> sync_vectorstore.py ──> ChromaDB (local) or Pinecone (cloud)
-                                               |
-                             ┌─────────────────┘
-                             v
-                 query_engine.py + router.py
-                             |
-             ┌───────────────┼───────────────┐
-             v               v               v
-          CLI            Web UI          Slack Bot
-       (cli.py)       (web_ui.py)     (slack_bot.py)
-       Terminal        Browser         Slack channels
+docs/*.md ──► sync_vectorstore.py ──► ChromaDB (local) / Pinecone (cloud)
+                                                │
+                              ┌─────────────────┘
+                              ▼
+                  router.py (auto-routes by topic)
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+           CLI            Web UI          Slack Bot
+        (cli.py)       (web_ui.py)     (slack_bot.py)
 ```
 
-**Free tier stack (default — zero API keys needed):**
-- Vector store: ChromaDB local (completely free)
-- LLM + Embeddings: Ollama + llama3.2 (local, free)
-
-**Production stack (opt-in):**
-- Vector store: Pinecone free tier (1 index, 2GB)
-- Embeddings: OpenAI text-embedding-3-small (~$0.01/full sync)
-- LLM: GPT-4o via OpenAI
-- Observability: LangSmith free tier (10k traces/month)
+Code follows the **Facade + Provider** pattern — swap backends by changing env vars, not code. See [CODING_STYLE_PROMPT.md](CODING_STYLE_PROMPT.md) for the full architecture guide.
 
 ---
 
-## Quick Start (Local Dev — No API Keys)
+## Slack Setup
 
-### 1. Prerequisites
-
-```bash
-# Python package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Local LLM (free, ~2GB download)
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull nomic-embed-text
-ollama pull phi3:latest
-```
-
-### 2. Install
-
-```bash
-git clone <your-repo> && cd docbot
-uv sync
-cp .env.example .env   # defaults work for local dev
-```
-
-### 3. Index your docs
-
-```bash
-# Make sure Ollama is running first
-ollama serve &
-
-uv run python scripts/sync_vectorstore.py
-```
-
-### 4. Start the web UI
-
-```bash
-uv run python bot/web_ui.py
-# Open http://localhost:8000
-```
-
-Or use the CLI:
-
-```bash
-uv run python bot/cli.py                              # interactive
-uv run python bot/cli.py "How does Face ID work?"     # single question
-uv run python bot/cli.py --authentication "session tokens"  # force collection
-```
-
----
-
-## Adding Documentation
-
-Drop `.md` files into the right `docs/` subfolder:
-
-```
-docs/
-  architecture/     # System design, ADRs, BFF layer
-  authentication/   # Auth flows, session management
-  payments/         # Transfer flows, limits, fraud
-  runbooks/         # Incident response procedures
-  onboarding/       # Getting started, team structure
-```
-
-Then re-sync:
-
-```bash
-uv run python scripts/sync_vectorstore.py
-```
-
-With GitHub Actions configured, sync runs automatically on every push to `main`.
-
----
-
-## CLI Commands
-
-```bash
-uv run python bot/cli.py                   # interactive mode
-uv run python bot/cli.py "your question"   # single question
-
-# In interactive mode:
-/sync              # re-index all docs
-/collections       # list available doc collections
-/auth <q>          # query authentication docs
-/payments <q>      # query payments docs
-/runbooks <q>      # query runbooks
-/architecture <q>  # query architecture docs
-/onboarding <q>    # query onboarding docs
-/help              # show all commands
-/quit              # exit
-```
-
----
-
-## Slack Bot Setup
-
-1. Create a Slack app at https://api.slack.com/apps
-2. Enable **Socket Mode** (Settings → Socket Mode)
-3. Add **Bot Token Scopes**: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`
-4. Subscribe to bot events: `app_mention`, `message.im`
-5. Install the app to your workspace
-6. Update `.env` with your tokens:
+1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Enable **Socket Mode** → generate an App-Level Token (`xapp-`)
+3. Add Bot Token Scopes: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`
+4. Subscribe to events: `app_mention`, `message.im`
+5. Set in `.env`:
    ```
    SLACK_BOT_TOKEN=xoxb-...
    SLACK_APP_TOKEN=xapp-...
-   SLACK_SIGNING_SECRET=...
    ```
-7. Run: `uv run python bot/slack_bot.py`
-
-### Slack commands
-
-| Command | Description |
-|---------|-------------|
-| `@docbot <question>` | Auto-routed question |
-| `@docbot /auth <q>` | Force authentication collection |
-| `@docbot /payments <q>` | Force payments collection |
-| `@docbot /runbooks <q>` | Force runbooks collection |
-| `@docbot /help` | Show help |
-| `@docbot /collections` | List indexed collections |
+6. Run: `uv run python bot/slack_bot.py`
 
 ---
 
 ## GitHub Actions (Auto-Sync)
 
-The workflow at `.github/workflows/sync-vectorstore.yml` syncs docs automatically when `.md` files change on `main`.
+Sync runs automatically on every push that touches `.md` files. Add these secrets to your repo:
 
-**Required GitHub Secrets:**
-
-| Secret | Where to get it |
-|--------|----------------|
-| `PINECONE_API_KEY` | https://app.pinecone.io → API Keys |
-| `PINECONE_INDEX` | Your index name (e.g. `docbot-docs`) |
-| `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
-| `LANGCHAIN_API_KEY` | https://smith.langchain.com → Settings (optional) |
+| Secret | Where |
+|---|---|
+| `PINECONE_API_KEY` | [app.pinecone.io](https://app.pinecone.io) → API Keys |
+| `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com/api-keys) |
+| `LANGCHAIN_API_KEY` | [smith.langchain.com](https://smith.langchain.com) (optional) |
 
 ---
 
 ## Environment Variables
 
-See `.env.example` for all options with comments.
+See [.env.example](.env.example) for all options.
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+|---|---|---|
 | `VECTORSTORE_BACKEND` | `chroma_local` | `chroma_local` or `pinecone` |
-| `CHROMA_PERSIST_DIR` | `.chroma_db` | Local ChromaDB storage path |
-| `OLLAMA_MODEL` | `llama3.2` | Ollama model for LLM + embeddings |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `CI` | unset | Set to `true` to use OpenAI instead of Ollama |
+| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model |
+| `OLLAMA_LLM_MODEL` | `phi3:latest` | Chat model |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server |
+| `CI` | unset | `true` → use OpenAI instead of Ollama |
 | `OPENAI_API_KEY` | — | Required when `CI=true` |
 | `PINECONE_API_KEY` | — | Required when backend is `pinecone` |
-| `SLACK_BOT_TOKEN` | — | Required for Slack bot |
 
 ---
 
-## Project Structure
+## Contributing
 
-```
-docbot/
-  bot/
-    __init__.py
-    cli.py           # Interactive CLI interface
-    web_ui.py        # Browser chat UI (FastAPI)
-    slack_bot.py     # Slack bot (Bolt SDK)
-    query_engine.py  # RAG query engine
-    router.py        # Collection router
-  docs/
-    architecture/    # Architecture docs and ADRs
-    authentication/  # Auth and session docs
-    payments/        # Payment flow docs
-    runbooks/        # Operational runbooks
-    onboarding/      # Getting started guides
-  scripts/
-    sync_vectorstore.py  # Doc ingestion pipeline
-  .github/workflows/
-    sync-vectorstore.yml  # CI auto-sync
-  .env.example
-  pyproject.toml
-```
+1. Fork → branch → PR
+2. Follow the coding style in [CODING_STYLE_PROMPT.md](CODING_STYLE_PROMPT.md)
+3. Keep every file under 150 lines of logic
+
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE)
