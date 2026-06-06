@@ -3,12 +3,12 @@ Ollama LLM Provider
 ===================
 Implements ``LLMProvider`` using a locally running Ollama model.
 
-Default model: ``llama3.2``. No API key required — free and fully local.
-Requires Ollama to be running: ``ollama serve`` and ``ollama pull llama3.2``.
+Default chat model: ``phi3:latest``. No API key required — free and fully local.
+Requires Ollama to be running: ``ollama serve`` and ``ollama pull phi3:latest``.
 
 Environment variables:
-    OLLAMA_MODEL    Model name (default: ``llama3.2``).
-    OLLAMA_BASE_URL Ollama API base URL (default: ``http://localhost:11434``).
+    OLLAMA_LLM_MODEL    Chat model (default: ``phi3:latest``).
+    OLLAMA_BASE_URL     Ollama API base URL (default: ``http://localhost:11434``).
 """
 
 import os
@@ -23,7 +23,9 @@ class OllamaLLMProvider:
     def _base(self) -> dict:
         """Return shared kwargs used by all ChatOllama instances."""
         return {
-            "model": os.getenv("OLLAMA_MODEL", "llama3.2"),
+            "model": os.getenv(
+                "OLLAMA_LLM_MODEL", os.getenv("OLLAMA_MODEL", "phi3:latest")
+            ),
             "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         }
 
@@ -40,6 +42,7 @@ class OllamaLLMProvider:
             httpx.ConnectError: If Ollama is not running at ``OLLAMA_BASE_URL``.
         """
         from langchain_ollama import ChatOllama
+
         return ChatOllama(**self._base(), temperature=temperature)
 
     def get_router(self):
@@ -49,4 +52,5 @@ class OllamaLLMProvider:
             ``langchain_ollama.ChatOllama`` at temperature 0.
         """
         from langchain_ollama import ChatOllama
+
         return ChatOllama(**self._base(), temperature=0)

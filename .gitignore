@@ -1,0 +1,7 @@
+.env
+.chroma_db
+.chroma_db_v2
+.vectorstore_hashes.json
+__pycache__/
+*.pyc
+.venv/

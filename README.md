@@ -40,7 +40,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Local LLM (free, ~2GB download)
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3.2
+ollama pull nomic-embed-text
+ollama pull phi3:latest
 ```
 
 ### 2. Install
