@@ -1,0 +1,26 @@
+# Drop this file into .github/workflows/ in any repo that has a docs/ folder.
+# Add PINECONE_API_KEY and OPENAI_API_KEY to that repo's GitHub Secrets.
+# That's it — every push to main that touches docs/ will sync to Pinecone.
+
+name: Sync Docs to DocBot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '**/*.md'
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  sync:
+    uses: KunalKumarSwift/Documation/.github/workflows/sync-vectorstore.yml@main
+    with:
+      docs_path: docs          # folder containing your .md / .txt files
+      pinecone_index: docbot-docs  # Pinecone index to write to
+    secrets:
+      PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LANGCHAIN_API_KEY: ${{ secrets.LANGCHAIN_API_KEY }}   # optional
