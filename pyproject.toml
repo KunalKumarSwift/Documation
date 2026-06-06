@@ -30,4 +30,3 @@ build-backend = "hatchling.build"
 packages = ["bot", "bot.core", "bot.facades", "bot.templates", "scripts"]
 
 [tool.uv]
-required-environments = ["sys_platform == 'darwin' and platform_machine == 'x86_64'"]

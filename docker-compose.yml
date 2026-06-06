@@ -1,0 +1,57 @@
+services:
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Pulls required models on first run, exits cleanly on subsequent runs
+  model-init:
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      sh -c "
+        ollama pull nomic-embed-text &&
+        ollama pull phi3:latest
+      "
+    restart: "no"
+
+  docbot:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - VECTORSTORE_BACKEND=chroma_local
+      - CHROMA_PERSIST_DIR=/data/chroma
+      - DOCS_DIR=/app/docs
+      - HASH_FILE=/data/.vectorstore_hashes.json
+    volumes:
+      - ./docs:/app/docs          # mount your docs folder
+      - docbot_data:/data         # persist ChromaDB + hash registry
+    depends_on:
+      ollama:
+        condition: service_healthy
+      model-init:
+        condition: service_completed_successfully
+    # Sync docs on every start, then launch the web UI
+    command: >
+      sh -c "
+        uv run python scripts/sync_vectorstore.py &&
+        uv run python bot/web_ui.py
+      "
+
+volumes:
+  ollama_data:
+  docbot_data:
